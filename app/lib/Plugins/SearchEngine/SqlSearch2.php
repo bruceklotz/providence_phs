@@ -432,7 +432,7 @@ class WLPlugSearchEngineSqlSearch2 extends BaseSearchPlugin implements IWLPlugSe
 	 	$field = $term->field;
 	 	$field_lc = mb_strtolower($field);
 	 	$field_elements = explode('.', $field_lc);
-	 	if (in_array($field_elements[0], [_t('created'), _t('modified')])) {
+	 	if (in_array($field_elements[0], ['created', 'modified', _t('created'), _t('modified')])) {
 	 		return $this->_processQueryChangeLog($subject_tablenum, $term);
 	 	}
 	 	$ap = $field ? $this->_getElementIDForAccessPoint($subject_tablenum, $field) : null;
@@ -636,7 +636,7 @@ class WLPlugSearchEngineSqlSearch2 extends BaseSearchPlugin implements IWLPlugSe
 	 	$field = $term->field;
 	 	$field_lc = mb_strtolower($field);
 	 	$field_elements = explode('.', $field_lc);
-	 	if (in_array($field_elements[0], [_t('created'), _t('modified')])) {
+	 	if (in_array($field_elements[0], ['created', 'modified', _t('created'), _t('modified')])) {
 	 		return $this->_processQueryChangeLog($subject_tablenum, $query);
 	 	}
 	 	
@@ -810,7 +810,7 @@ class WLPlugSearchEngineSqlSearch2 extends BaseSearchPlugin implements IWLPlugSe
 	 	$text = str_replace('*', '', $text);	// strip wildcards
 	 	$field_lc = mb_strtolower($field);
 	 	$field_elements = explode('.', $field_lc);
-	 	if (in_array($field_elements[0], [_t('created'), _t('modified')])) {
+	 	if (in_array($field_elements[0], ['created', 'modified', _t('created'), _t('modified')])) {
 	 		if (!$this->tep->parse($text)) { return []; }
 	 		$range = $this->tep->getUnixTimestamps();
 			$user_id = null;
@@ -833,6 +833,7 @@ class WLPlugSearchEngineSqlSearch2 extends BaseSearchPlugin implements IWLPlugSe
 
 			switch($field_elements[0]) { 
 				case _t('created'):
+				case 'created':
 					$qr_res = $this->db->query("
 							SELECT ccl.logged_row_id row_id, 1 boost
 							FROM ca_change_log ccl
@@ -846,6 +847,7 @@ class WLPlugSearchEngineSqlSearch2 extends BaseSearchPlugin implements IWLPlugSe
 						", [(int)$range['start'], (int)$range['end'], $subject_tablenum]);
 					break;
 				case _t('modified'):
+				case 'modified':
 					$qr_res = $this->db->query("
 							SELECT '_change_log_' as index_id, ccl.logged_row_id row_id, 1 boost
 							FROM ca_change_log ccl
@@ -1243,6 +1245,7 @@ class WLPlugSearchEngineSqlSearch2 extends BaseSearchPlugin implements IWLPlugSe
 		$tokenize = $options['DONT_TOKENIZE'] ? false : true;
 		
 		$rel_type_id = (isset($options['relationship_type_id']) && ($options['relationship_type_id'] > 0)) ? (int)$options['relationship_type_id'] : 0;
+		if($rel_type_id > 65535) { $rel_type_id = 0; } // disregard if out of bound; can happen with set items where rel_type_id isn't really relevant
 		$container_id = (isset($options['container_id']) && ($options['container_id'] > 0)) ? (int)$options['container_id'] : 'NULL';
 		
 		if (!isset($options['PRIVATE'])) { $options['PRIVATE'] = 0; }
@@ -1511,7 +1514,7 @@ class WLPlugSearchEngineSqlSearch2 extends BaseSearchPlugin implements IWLPlugSe
 		$vn_private = $pa_options['PRIVATE'] ? 1 : 0;
 		
 		$vn_rel_type_id = (int)caGetOption('relationship_type_id', $pa_options, 0);
-		
+		if($vn_rel_type_id > 65535) { $vn_rel_type_id = 0; } // disregard if out of bound; can happen with set items where rel_type_id isn't really relevant
 		$va_row_insert_sql = array();
 		
 		$subject_tablenum = (int)$subject_tablenum;
@@ -1529,18 +1532,22 @@ class WLPlugSearchEngineSqlSearch2 extends BaseSearchPlugin implements IWLPlugSe
 			
 			if($va_words) {
 				$wc = sizeof($va_words);
+				if($wc > 255) { $wc = 255; }
 				foreach($va_words as $i => $vs_word) {
 					if(is_null($vs_word))  { continue; }
 					if (!($vn_word_id = $this->getWordID($vs_word))) { continue; }
-					$va_row_insert_sql[] = "({$subject_tablenum}, {$vn_row_id}, {$pn_content_tablenum}, '{$ps_content_fieldnum}', ".($pn_content_container_id ? $pn_content_container_id : 'NULL').", {$pn_content_row_id}, {$vn_word_id}, {$vn_boost}, {$vn_private}, {$vn_rel_type_id}, {$i}, {$wc}, {$fi})";
+					$ii = ($i > 255) ? 255 : $i; 
+					$va_row_insert_sql[] = "({$subject_tablenum}, {$vn_row_id}, {$pn_content_tablenum}, '{$ps_content_fieldnum}', ".($pn_content_container_id ? $pn_content_container_id : 'NULL').", {$pn_content_row_id}, {$vn_word_id}, {$vn_boost}, {$vn_private}, {$vn_rel_type_id}, {$ii}, {$wc}, {$fi})";
 					$seq++;
 				}
 			
 				if (is_array($va_literal_content)) {
 					$wc = sizeof($va_literal_content);
+					if($wc > 255) { $wc = 255; }
 					foreach($va_literal_content as $i => $vs_literal) {
 						if (!($vn_word_id = $this->getWordID($vs_literal))) { continue; }
-						$va_row_insert_sql[] = "({$subject_tablenum}, {$vn_row_id}, {$pn_content_tablenum}, '{$ps_content_fieldnum}', ".($pn_content_container_id ? $pn_content_container_id : 'NULL').", {$pn_content_row_id}, {$vn_word_id}, {$vn_boost}, {$vn_private}, {$vn_rel_type_id}, {$i}, {$wc}, {$fi})";
+						$ii = ($i > 255) ? 255 : $i; 
+						$va_row_insert_sql[] = "({$subject_tablenum}, {$vn_row_id}, {$pn_content_tablenum}, '{$ps_content_fieldnum}', ".($pn_content_container_id ? $pn_content_container_id : 'NULL').", {$pn_content_row_id}, {$vn_word_id}, {$vn_boost}, {$vn_private}, {$vn_rel_type_id}, {$ii}, {$wc}, {$fi})";
 						$seq++;
 					}
 				}
@@ -1549,7 +1556,7 @@ class WLPlugSearchEngineSqlSearch2 extends BaseSearchPlugin implements IWLPlugSe
 				$seq++;
 			}
 			
-			$fi++;
+			if ($fi < 255) { $fi++; }
 		}
 		
 		// do insert
@@ -1612,6 +1619,7 @@ class WLPlugSearchEngineSqlSearch2 extends BaseSearchPlugin implements IWLPlugSe
 		}
 		
 		$words = self::filterStopWords($words);
+		$words = array_values(array_filter(array_map(function_exists('mb_trim') ? 'mb_trim' : 'trim', $words), 'strlen'));
 		return $words;
 	}
 	# --------------------------------------------------

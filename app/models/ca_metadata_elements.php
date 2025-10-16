@@ -837,12 +837,13 @@ class ca_metadata_elements extends LabelableBaseModelWithAttributes implements I
 	 * @param $pa_data_types array Optional list of element data types to filter on.
 	 * @param $options Options include:
 	 *		useDisambiguationLabels = 
+	 *		deletedOnly = return deleted elements only. [Default is false]
 	 *
 	 * @return array A List of elements. Each list item is an array with keys set to field names; there is one additional value added with key "display_label" set to the display label of the element in the current locale
 	 */
 	public static function getElementsAsList($pb_root_elements_only=false, $pm_table_name_or_num=null, $pm_type_name_or_id=null, $pb_use_cache=true, $pb_return_stats=false, $pb_index_by_element_code=false, $pa_data_types=null, $options=null){
 		$vn_table_num = Datamodel::getTableNum($pm_table_name_or_num);
-		$vs_cache_key = md5($vn_table_num.'/'.$pm_type_name_or_id.'/'.($pb_root_elements_only ? '1' : '0').'/'.($pb_index_by_element_code ? '1' : '0').serialize($pa_data_types));
+		$vs_cache_key = md5($vn_table_num.'/'.$pm_type_name_or_id.'/'.($pb_root_elements_only ? '1' : '0').'/'.($pb_index_by_element_code ? '1' : '0').serialize($pa_data_types).serialize($options));
 
 		if($pb_use_cache && CompositeCache::contains($vs_cache_key, 'ElementList')) {
 			$va_element_list = CompositeCache::fetch($vs_cache_key, 'ElementList');
@@ -862,7 +863,11 @@ class ca_metadata_elements extends LabelableBaseModelWithAttributes implements I
 		
 		$va_wheres = $va_where_params = [];
 		
-		$va_wheres[] = 'cme.deleted = 0';
+		if(caGetOption('deletedOnly', $options, false)) {
+			$va_wheres[] = 'cme.deleted = 1';
+		} else {
+			$va_wheres[] = 'cme.deleted = 0';
+		}
 		
 		if ($pb_root_elements_only) {
 			$va_wheres[] = 'cme.parent_id is NULL';
@@ -1640,11 +1645,11 @@ class ca_metadata_elements extends LabelableBaseModelWithAttributes implements I
 	 * @return ca_metadata_elements|mixed|null
 	 * @throws MemoryCacheInvalidParameterException
 	 */
-	static public function getInstance($pm_element_code_or_id) {
+	static public function getInstance($pm_element_code_or_id, ?array $options=null) {
 		if(!$pm_element_code_or_id) { return null; }
 		if(is_numeric($pm_element_code_or_id)) { $pm_element_code_or_id = (int) $pm_element_code_or_id; }
 
-		if(MemoryCache::contains($pm_element_code_or_id, 'ElementInstances')) {
+		if(!caGetOption('noCache', $options, false) && MemoryCache::contains($pm_element_code_or_id, 'ElementInstances')) {
 			return MemoryCache::fetch($pm_element_code_or_id, 'ElementInstances');
 		}
 
