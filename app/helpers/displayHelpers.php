@@ -1366,7 +1366,7 @@ function caEditorInspector($view, $options=null) {
 				FooterManager::add($change_type_view->render("change_type_html.php"));
 				TooltipManager::add("#inspectorChangeType", _t('Change Record Type'));
 			}
-
+		
 			if ($t_item->getPrimaryKey() && $view->request->config->get("{$table_name}_show_add_child_control_in_inspector")) {
 				$show_add_child_control = true;
 				if (is_array($va_restrict_add_child_control_to_types = $view->request->config->getList($table_name.'_restrict_child_control_in_inspector_to_types')) && sizeof($va_restrict_add_child_control_to_types)) {
@@ -1474,6 +1474,19 @@ function caEditorInspector($view, $options=null) {
 			$autodelete_info = ca_sets::getAutoDeleteInfo($t_item, $view->request->user);
 			$msg = $autodelete_info['message'] ?? null;
 			$more_info .= "<div id='inspectorAutoDeleteMessage' class='inspectorAutodeleteSet'>{$msg}</div>\n";
+		}
+				
+		$set_access_for_related_tables = $view->request->config->getAssoc('set_access_for_related_tables');
+		if($view->request->user->canDoAction("can_set_access_for_related_{$table_name}") && is_array($set_access_for_related_tables) && is_array($set_access_for_related_tables[$table_name]) && sizeof($set_access_for_related_tables[$table_name])) {
+			$set_access_for_related_tables = $set_access_for_related_tables[$table_name];
+			$tools[] = "<div id='inspectorSetAccessForRelated' class='inspectorActionButton'><div id='inspectorSetAccessForRelatedButon'><a href='#' onclick='caSetAccessForRelatedPanel.showPanel(); return false;'>".caNavIcon(__CA_NAV_ICON_SET_ACCESS__, '20px', array('title' => _t('Set access for related')))."</a></div></div>\n";
+
+			$set_access_for_related_tables_view = new View($view->request, $view->request->getViewsDirectoryPath()."/bundles/");
+			$set_access_for_related_tables_view->setVar('t_item', $t_item);
+			$set_access_for_related_tables_view->setVar('targets', $set_access_for_related_tables);
+
+			FooterManager::add($set_access_for_related_tables_view->render("set_access_for_related_html.php"));
+			TooltipManager::add("#inspectorSetAccessForRelated", _t('Set Access For Related'));
 		}
 		
 		$creation = $t_item->getCreationTimestamp();
@@ -3790,7 +3803,7 @@ function caEditorBundleMetadataDictionary($po_request, $ps_id_prefix, $pa_settin
 	$vs_buf .= "<a href='#' class='caMetadataDictionaryDefinitionToggle' onclick='caBundleVisibilityManager.toggleDictionaryEntry(\"{$ps_id_prefix}\");  return false;'>".caNavIcon(__CA_NAV_ICON_INFO__, 1, array('id' => "{$ps_id_prefix}MetadataDictionaryToggleButton"))."</a>";
 
 	$vs_buf .= "<div id='{$ps_id_prefix}DictionaryEntry' class='caMetadataDictionaryDefinition'>{$vs_definition}</div>";
-	$vs_buf .= "<script type='text/javascript'>jQuery(document).ready(function() { caBundleVisibilityManager.registerBundle('{$ps_id_prefix}'); }); </script>";	
+	$vs_buf .= "<script type='text/javascript'>jQuery(document).ready(function() { caBundleVisibilityManager.registerBundle('{$ps_id_prefix}', 'closed'); }); </script>";	
 	$vs_buf .= "</span>\n";	
 
 	return $vs_buf;
@@ -6442,6 +6455,20 @@ function caGetCK5Toolbar(array $options=null) : ?array {
 		$groups = array_merge($groups, $group);
 	}
 	return $groups;
+}
+# ------------------------------------------------------------------
+/**
+ *
+ */
+function caAllowEditingForFirstLevelOfHierarchyBrowser(BaseModel $t_subject) : bool {
+	if($t_subject->getHierarchyType() === __CA_HIER_TYPE_MULTI_MONO__) { return false; }
+	if(
+		($t_subject->getHierarchyType() === __CA_HIER_TYPE_SIMPLE_MONO__)
+		&&
+		!$t_subject->getAppConfig()->get($t_subject->tableName().'_hierarchy_browser_hide_root')
+	) { return false; }
+	
+	return true;
 }
 # ------------------------------------------------------------------
 

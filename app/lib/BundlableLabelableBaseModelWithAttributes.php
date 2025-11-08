@@ -368,6 +368,7 @@ class BundlableLabelableBaseModelWithAttributes extends LabelableBaseModelWithAt
 
 		$va_errors = [];
 		if (!$this->_validateIncomingAdminIDNo(true, false)) { 
+			 if ($this->_CONFIG->get('require_valid_id_number_for_'.$this->tableName())) { return false; }
 			 $va_errors = $this->errors();
 			 // don't save number if it's invalid
 			 if ($vs_idno_field = $this->getProperty('ID_NUMBERING_ID_FIELD')) {
@@ -2062,6 +2063,10 @@ class BundlableLabelableBaseModelWithAttributes extends LabelableBaseModelWithAt
 					// 
 					case 'ca_user_roles':
 						if (!$pa_options['request']->user->canDoAction('is_administrator') && ($pa_options['request']->getUserID() != $this->get('user_id'))) { return ''; }	// don't allow setting of group access if user is not owner
+						
+						if(in_array($this->tableName(), ['ca_editor_uis', 'ca_editor_ui_screens'], true)) { 
+						    $pa_options['defaultAccess'] = __CA_BUNDLE_ACCESS_EDIT__;
+						}
 						$vs_element .= $this->getUserRoleHTMLFormBundle($pa_options['request'], $pa_options['formName'], $ps_placement_code, $this->tableNum(), $this->getPrimaryKey(), $pa_options['request']->getUserID(), $pa_options);
 						break;
 					# -------------------------------
@@ -4000,11 +4005,14 @@ class BundlableLabelableBaseModelWithAttributes extends LabelableBaseModelWithAt
 							break;
 						default:
 							// Look for fully qualified intrinsic
-							if(!strlen($vs_v = $po_request->getParameter("{$vs_placement_code}{$vs_form_prefix}{$vs_f}", pString))) {
+							$vs_v = $po_request->parameterExists("{$vs_placement_code}{$vs_form_prefix}{$vs_f}") ? $po_request->getParameter("{$vs_placement_code}{$vs_form_prefix}{$vs_f}", pString) : null;
+							if(is_null($vs_v)) {
 								// fall back to simple field name intrinsic spec - still used for "mandatory" fields such as type_id and parent_id
-								$vs_v = $po_request->getParameter("{$vs_f}", pString);
+								$vs_v = $po_request->parameterExists("{$vs_f}") ? $po_request->getParameter("{$vs_f}", pString) : null;
 							}
-							$this->set($vs_f, $vs_v);
+							if(!is_null($vs_v)) { 
+								$this->set($vs_f, $vs_v);
+							}
 							break;
 					}
 				}
@@ -4077,8 +4085,16 @@ class BundlableLabelableBaseModelWithAttributes extends LabelableBaseModelWithAt
 								case '_disabled_':		// skip
 									continue(2);
 									break;
-								case '_add_':			// just try to add attribute as in normal non-batch save
-									// noop
+								case '_add_':
+									// Is there a single existing value that is blank? If so delete it.
+									// Otherwise just add attribute as in normal non-batch save.
+									$attrs = $this->getAttributesByElement($vn_element_id);
+									if(is_array($attrs) && (sizeof($attrs) === 1)) {
+										$attr_values = $attrs[0]->getValues();
+										if(is_array($attr_values) && (sizeof($attr_values) === 1) && $attr_values[0]->isEmpty()) {
+											$this->removeAttributes($vn_element_id, array('force' => true));
+										}
+									}
 									break;
 								case '_replace_':		// remove all existing attributes before trying to save
 									$this->removeAttributes($vn_element_id, array('force' => true));
@@ -4961,6 +4977,10 @@ if (!$batch) {
 											}
 											if ($t_rep = $this->addRepresentation($f, $vn_rep_type_id, $vals['locale_id'] ?? null, $vals['status'] ?? null, $vals['access'] ?? null, null, array_merge($vals, ['name' => $vals['rep_label'] ?? null]), ['original_filename' => $vs_original_name, 'returnRepresentation' => true, 'centerX' => $vn_center_x, 'centerY' => $vn_center_y, 'type_id' => $vn_type_id, 'mapping_id' => $vn_object_representation_mapping_id])) {	// $vn_type_id = *relationship* type_id (as opposed to representation type)
 												@unlink($f);
+											} else {
+												foreach($this->errors as $e) {
+													$po_request->addActionErrors(array(new ApplicationError(1100, _t('Could not add media: %1', $e->getErrorDescription()), "BundlableLabelableBaseModelWithAttributes->saveBundlesForScreen()", 'ca_object_representations', false,false)), $vs_bundle, 'general');
+												}
 											}
 										}
 									} elseif($vs_key === 'empty') {
